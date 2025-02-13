@@ -7,9 +7,9 @@ on:
   workflow_dispatch:  # allows manual trigger
 
 env:
-  FUNCTION_NAME: your-lambda-function-name  # customize this
-  RUNTIME: nodejs18.x  # adjust based on your runtime
-  HANDLER: index.handler  # adjust based on your handler file
+  FUNCTION_NAME: main
+  RUNTIME: python3.12 
+  HANDLER: main.main
 
 jobs:
   deploy:
@@ -19,19 +19,23 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v3
     
-    - name: Setup Node.js
-      uses: actions/setup-node@v3
+    - name: Setup Python
+      uses: actions/setup-python@v4
       with:
-        node-version: '18'
+        python-version: '3.12'
     
     - name: Install dependencies
       run: |
-        npm ci
-        npm run build  # if you have a build step
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install --target ./package -r requirements.txt
     
     - name: Create deployment package
       run: |
-        zip -r deployment.zip . -x "*.git*" "node_modules/*" "tests/*"
+        cd package
+        zip -r ../deployment.zip .
+        cd ..
+        zip -r -g deployment.zip app/
         
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v1
@@ -40,7 +44,7 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: ${{ secrets.AWS_REGION }}
     
-    - name: Update Lambda function code
+    - name: Update Lambda function(Telegram Bot) code
       run: |
         aws lambda update-function-code \
           --function-name ${{ env.FUNCTION_NAME }} \
