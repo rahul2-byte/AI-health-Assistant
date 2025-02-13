@@ -5,98 +5,92 @@ from dotenv import load_dotenv
 import os
 import yaml
 import re
+from components.agents import llmchain
 
-load_dotenv()
-BOT_TOKEN = os.getenv("TELEGRAM_TOKEN")
-BASE_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
+class TelegramBot():
+    def __init__(self):
+        self.PORT = 80
+        load_dotenv()
+        BOT_TOKEN = os.getenv("TELEGRAM_TOKEN")
+        self.BASE_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
+        
+        # ✅ Initialize Flask app before defining routes
+        self.app = Flask(__name__)
+        self.commands = self.get_bot_commands()
+        
+        # Register the webhook route
+        self.app.route('/webhook', methods=['POST'])(self.webhook)
 
-def get_bot_commands():
-    # Load YAML file
-    with open("./bot-commands.yml", "r", encoding="utf-8") as file:
-        bot_commands = yaml.safe_load(file)
+    def get_bot_commands(self):
+        # Load YAML file
+        with open("app/components/bot-commands.yml", "r", encoding="utf-8") as file:
+            bot_commands = yaml.safe_load(file)
+        # Return the bot commands
+        return {key: value for key, value in bot_commands["commands"].items()}
 
-    command_dict = {}
-    for key, value in bot_commands["commands"].items():
-        command_dict[key] = value
-    return command_dict
+    @staticmethod
+    def is_text_a_command(text, commands):
+        """Check if the text is command"""
+        return re.sub(r"[ /]", "", text) in commands
 
-commands = get_bot_commands()
+    @staticmethod
+    def text_command(text, commands):
+        """ Return the command text"""
+        plain_text_command = re.sub(r"[ /]", "", text)
 
-def is_text_a_command(text, commands):
-    """Check if the text is command"""
-    if re.sub(r"[ /]", "", text) in commands:
-        return True
-    return False
+        return commands.get(plain_text_command, "No command found!!")
 
-def text_command(text, commands):
-    """ Return the command text"""
-    # remove the / and traling spaces from commands
-    plain_text_command = re.sub(r"[ /]", "", text)
+    def send_message(self, chat_id, text):
+        """Send message to a specific chat"""
+        url = f"{self.BASE_URL}/sendMessage"
+        data = {
+            "chat_id": chat_id,
+            "text": text
+        }
+        response = requests.post(url, json=data)
+        return response.json()
 
-    if plain_text_command in commands:
-        return commands[plain_text_command]
-    return "No command found!!"
+    def webhook(self):
+        """Handle incoming updates from Telegram"""
+        update = request.get_json()
+        
+        # Extract message details
+        if "message" in update:
+            chat_id = update["message"]["chat"]["id"]
+            if "text" in update["message"]:
+                received_text = update["message"]["text"]
+                # Check for commands in received text
 
-text_command("/start", commands)
+                if self.is_text_a_command(received_text, self.commands):
+                    command = self.text_command(received_text, self.commands)
+                    # Send command instruction
+                    self.send_message(chat_id, command)
+                else: 
+                    # Echo the received message back to user
+                    output = llmchain.get_output(received_text)
+                    self.send_message(chat_id, f"You said: {output}")
 
-# ✅ Initialize Flask app before defining routes
-app = Flask(__name__)
+        return jsonify({"ok": True})
 
-def send_message(chat_id, text):
-    """Send message to a specific chat"""
-    url = f"{BASE_URL}/sendMessage"
-    data = {
-        "chat_id": chat_id,
-        "text": text
-    }
-    response = requests.post(url, json=data)
-    return response.json()
+    def setup_webhook(self, webhook_url):
+        """Set up webhook with Telegram"""
+        url = f"{self.BASE_URL}/setWebhook"
+        data = {
+            "url": webhook_url
+        }
+        response = requests.post(url, json=data)
+        return response.json()
 
-@app.route('/webhook', methods=['POST'])
-def webhook():
-    """Handle incoming updates from Telegram"""
-    update = request.get_json()
-    COMMANDS = get_bot_commands()
-    
-    # Extract message details
-    if "message" in update:
-        chat_id = update["message"]["chat"]["id"]
-        if "text" in update["message"]:
-            received_text = update["message"]["text"]
-            # Check for commands in received text
-            is_command = is_text_a_command(received_text, COMMANDS)
-            
-            if is_command:
-                command = text_command(received_text, COMMANDS)
-                # Send command instruction
-                send_message(chat_id, command)
-            else: 
-                # Echo the received message back to user
-                send_message(chat_id, f"You said: {received_text}")
-    
-    return jsonify({"ok": True})
+    def run(self):
+        public_url = ngrok.connect(self.PORT)
+        webhook_url = f"{public_url.public_url}/webhook"
 
-def setup_webhook(webhook_url):
-    """Set up webhook with Telegram"""
-    url = f"{BASE_URL}/setWebhook"
-    data = {
-        "url": webhook_url
-    }
-    response = requests.post(url, json=data)
-    return response.json()
+        # Set up webhook with Telegram
+        print("Setting up webhook...")
+        result = self.setup_webhook(webhook_url)
+        print(f"Webhook setup result: {result}")
 
-def run_bot():
-    # Start ngrok
-    PORT = 80
-    public_url = ngrok.connect(PORT)
-    webhook_url = f"{public_url.public_url}/webhook"
-
-    # Set up webhook with Telegram
-    print("Setting up webhook...")
-    result = setup_webhook(webhook_url)
-    print(f"Webhook setup result: {result}")
-
-    print(f"Webhook URL: {webhook_url}")
-    app.run(port=PORT)
-    
-run_bot()
+        print(f"Webhook URL: {webhook_url}")
+        self.app.run(port=self.PORT)
+        
+        return {"status": 200, "data": "Bot is Running"}

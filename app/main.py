@@ -1,17 +1,13 @@
-from components.agents import llmchain
-from components.messanger import Bot
+from components.server import TelegramBot
 
 def main():
-
-    prompt = "How many grams of protien does chiken have..?"
-    # output = llmchain.get_output(prompt)
-    # print("Final Output :- ", output)
     
-    bot = Bot()
+    bot = TelegramBot()
     
-    text = bot.run()
-
-    print("Text", text)
+    try:
+        bot.run()
+    except Exception as e: 
+        print(f"Error running bot: {e}")
 
 if __name__ == "__main__":
     main()
