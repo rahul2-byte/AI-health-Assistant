@@ -1,0 +1,59 @@
+name: Deploy Telegram Bot
+
+on:
+  push:
+    branches:
+      - main  # or your preferred branch
+  workflow_dispatch:  # allows manual trigger
+
+env:
+  FUNCTION_NAME: your-lambda-function-name  # customize this
+  RUNTIME: nodejs18.x  # adjust based on your runtime
+  HANDLER: index.handler  # adjust based on your handler file
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+    
+    - name: Install dependencies
+      run: |
+        npm ci
+        npm run build  # if you have a build step
+    
+    - name: Create deployment package
+      run: |
+        zip -r deployment.zip . -x "*.git*" "node_modules/*" "tests/*"
+        
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
+    
+    - name: Update Lambda function code
+      run: |
+        aws lambda update-function-code \
+          --function-name ${{ env.FUNCTION_NAME }} \
+          --zip-file fileb://deployment.zip
+    
+    - name: Update Lambda configuration
+      run: |
+        aws lambda update-function-configuration \
+          --function-name ${{ env.FUNCTION_NAME }} \
+          --runtime ${{ env.RUNTIME }} \
+          --handler ${{ env.HANDLER }}
+    
+    - name: Verify deployment
+      run: |
+        aws lambda wait function-updated --function-name ${{ env.FUNCTION_NAME }}
+        echo "Lambda function updated successfully"
