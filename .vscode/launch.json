@@ -10,6 +10,13 @@
     "request": "launch",
     "program": "app/main.py",
     "console": "integratedTerminal"
-    }
+    },
+    {
+      "name": "Server",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "app/components/server.py",
+      "console": "integratedTerminal"
+      }
 ]
 }

@@ -3,7 +3,6 @@ from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTempla
 from components.client import llm
 from langchain.chains import LLMChain, SequentialChain
 
-
 # 🤖 First node gets the data from the LLM for the given prompt
 def research():
 
@@ -139,7 +138,7 @@ def output():
         Text: {validation} '''),
         ]
     )
-    
+
     return LLMChain(llm=llm(), prompt=formating_prompt, output_key="final_output")
 
 def get_output(prompt):

@@ -1,0 +1,63 @@
+name: Deploy Telegram Bot
+
+on:
+  push:
+    branches:
+      - main  # or your preferred branch
+  workflow_dispatch:  # allows manual trigger
+
+env:
+  FUNCTION_NAME: main
+  RUNTIME: python3.12 
+  HANDLER: main.main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+    
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install --target ./package -r requirements.txt
+    
+    - name: Create deployment package
+      run: |
+        cd package
+        zip -r ../deployment.zip .
+        cd ..
+        zip -r -g deployment.zip app/
+        
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
+    
+    - name: Update Lambda function(Telegram Bot) code
+      run: |
+        aws lambda update-function-code \
+          --function-name ${{ env.FUNCTION_NAME }} \
+          --zip-file fileb://deployment.zip
+    
+    - name: Update Lambda configuration
+      run: |
+        aws lambda update-function-configuration \
+          --function-name ${{ env.FUNCTION_NAME }} \
+          --runtime ${{ env.RUNTIME }} \
+          --handler ${{ env.HANDLER }}
+    
+    - name: Verify deployment
+      run: |
+        aws lambda wait function-updated --function-name ${{ env.FUNCTION_NAME }}
+        echo "Lambda function updated successfully"
