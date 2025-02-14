@@ -45,18 +45,16 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: ap-south-1
     
-    - name: Update Lambda function(Telegram Bot) code
+    - name: Upload deployment package to S3
+      run: |
+        aws s3 cp deployment.zip s3://telegram-bot-zip-file/deployment.zip
+
+    - name: Deploy Lambda from S3
       run: |
         aws lambda update-function-code \
           --function-name ${{ env.FUNCTION_NAME }} \
-          --zip-file fileb://deployment.zip
-    
-    - name: Update Lambda configuration
-      run: |
-        aws lambda update-function-configuration \
-          --function-name ${{ env.FUNCTION_NAME }} \
-          --runtime ${{ env.RUNTIME }} \
-          --handler ${{ env.HANDLER }}
+          --s3-bucket telegram-bot-zip-file \
+          --s3-key deployment.zip
     
     - name: Verify deployment
       run: |
