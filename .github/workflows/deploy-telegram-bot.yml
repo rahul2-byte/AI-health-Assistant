@@ -32,10 +32,10 @@ jobs:
     - name: Create deployment package
       run: |
         cd package
-        zip -r ../deployment.zip .
+        zip -r9 ../deployment.zip .  # Use -r9 for best compression
         cd ..
         cd app
-        zip -r ../deployment.zip .
+        zip -r9 ../deployment.zip . -x '*.git*' '*__pycache__*' '*.DS_Store*' '*tests*'
         cd ..
 
     - name: Configure AWS credentials
