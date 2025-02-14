@@ -9,7 +9,7 @@ on:
 env:
   FUNCTION_NAME: main
   RUNTIME: python3.12 
-  HANDLER: main.main
+  HANDLER: index
 
 jobs:
   deploy:
