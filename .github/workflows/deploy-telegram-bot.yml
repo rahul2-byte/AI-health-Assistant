@@ -22,16 +22,18 @@ jobs:
     - name: Setup Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.12'
+        python-version: '3.11'
     
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
         pip install --target ./package -r requirements.txt
     
     - name: Create deployment package
       run: |
+        cd package
+        zip -r ../deployment.zip .
+        cd ..
         cd app
         zip -r ../deployment.zip .
         cd ..
@@ -58,5 +60,5 @@ jobs:
     
     - name: Verify deployment
       run: |
-        aws lambda wait function-updated --function-name ${{ env.FUNCTION_NAME }}
+        aws lambda wait function-updated --function-name ${{ env.FUNCTION_NAME }} --max-attempts 10
         echo "Lambda function updated successfully"
