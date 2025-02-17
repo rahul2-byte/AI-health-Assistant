@@ -32,20 +32,13 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        if [ -f requirements.txt ]; then
-          pip install --target ./package -r requirements.txt
-        else
-          echo "No requirements.txt found. Creating empty package directory."
-          mkdir -p ./package
-        fi
+        pip install -r requirements.txt
+        pip install --target ./package -r requirements.txt
     
     - name: Create deployment package
       run: |
-        cd package
-        zip -r9 ../deployment.zip .
-        cd ..
         cd app
-        zip -g ../deployment.zip . -x '*.git*' '*__pycache__*' '*.DS_Store*' '*tests*'
+        zip -r ../deployment.zip .
         cd ..
 
     - name: Configure AWS credentials
