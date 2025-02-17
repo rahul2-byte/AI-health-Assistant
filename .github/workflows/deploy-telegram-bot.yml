@@ -3,13 +3,18 @@ name: Deploy Telegram Bot
 on:
   push:
     branches:
-      - main  # or your preferred branch
-  workflow_dispatch:  # allows manual trigger
+      - main
+  workflow_dispatch:
 
 env:
   FUNCTION_NAME: main
-  RUNTIME: python3.12 
-  HANDLER: index
+  RUNTIME: python3.11
+  HANDLER: index.lambda_handler
+  MEMORY_SIZE: 128
+  TIMEOUT: 30
+  IAM_ROLE: ${{ secrets.LAMBDA_EXECUTION_ROLE }}
+  DEPLOYMENT_BUCKET: ${{ secrets.S3_BUCKET }}
+  DEPLOYMENT_KEY: deployments/main/deployment-${{ github.sha }}.zip
 
 jobs:
   deploy:
@@ -27,15 +32,20 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install --target ./package -r requirements.txt
+        if [ -f requirements.txt ]; then
+          pip install --target ./package -r requirements.txt
+        else
+          echo "No requirements.txt found. Creating empty package directory."
+          mkdir -p ./package
+        fi
     
     - name: Create deployment package
       run: |
         cd package
-        zip -r9 ../deployment.zip .  # Use -r9 for best compression
+        zip -r9 ../deployment.zip .
         cd ..
         cd app
-        zip -r9 ../deployment.zip . -x '*.git*' '*__pycache__*' '*.DS_Store*' '*tests*'
+        zip -g ../deployment.zip . -x '*.git*' '*__pycache__*' '*.DS_Store*' '*tests*'
         cd ..
 
     - name: Configure AWS credentials
@@ -44,19 +54,98 @@ jobs:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: ap-south-1
-    
+
+    - name: Check if deployment package exists in S3
+      id: check_s3
+      run: |
+        if aws s3api head-object --bucket ${{ env.DEPLOYMENT_BUCKET }} --key ${{ env.DEPLOYMENT_KEY }} 2>/dev/null; then
+          echo "exists=true" >> $GITHUB_OUTPUT
+        else
+          echo "exists=false" >> $GITHUB_OUTPUT
+        fi
+
     - name: Upload deployment package to S3
       run: |
-        aws s3 cp deployment.zip s3://telegram-bot-zip-file/deployment.zip
-
-    - name: Deploy Lambda from S3
+        aws s3 cp deployment.zip s3://${{ env.DEPLOYMENT_BUCKET }}/${{ env.DEPLOYMENT_KEY }}
+        echo "Deployment package uploaded to s3://${{ env.DEPLOYMENT_BUCKET }}/${{ env.DEPLOYMENT_KEY }}"
+    
+    - name: Check if Lambda function exists
+      id: check_function
       run: |
+        if aws lambda get-function --function-name ${{ env.FUNCTION_NAME }} 2>/dev/null; then
+          echo "exists=true" >> $GITHUB_OUTPUT
+        else
+          echo "exists=false" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Create Lambda function if not exists
+      if: steps.check_function.outputs.exists == 'false'
+      run: |
+        aws lambda create-function \
+          --function-name ${{ env.FUNCTION_NAME }} \
+          --runtime ${{ env.RUNTIME }} \
+          --handler ${{ env.HANDLER }} \
+          --memory-size ${{ env.MEMORY_SIZE }} \
+          --timeout ${{ env.TIMEOUT }} \
+          --role ${{ env.IAM_ROLE }} \
+          --code S3Bucket=${{ env.DEPLOYMENT_BUCKET }},S3Key=${{ env.DEPLOYMENT_KEY }} \
+          --environment Variables={TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}} \
+          --tags Project=TelegramBot
+
+    - name: Update existing Lambda function
+      if: steps.check_function.outputs.exists == 'true'
+      run: |
+        # Update function configuration
+        aws lambda update-function-configuration \
+          --function-name ${{ env.FUNCTION_NAME }} \
+          --runtime ${{ env.RUNTIME }} \
+          --handler ${{ env.HANDLER }} \
+          --memory-size ${{ env.MEMORY_SIZE }} \
+          --timeout ${{ env.TIMEOUT }} \
+          --environment Variables={TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}}
+        
+        # Update function code from S3
         aws lambda update-function-code \
           --function-name ${{ env.FUNCTION_NAME }} \
-          --s3-bucket telegram-bot-zip-file \
-          --s3-key deployment.zip
-    
+          --s3-bucket ${{ env.DEPLOYMENT_BUCKET }} \
+          --s3-key ${{ env.DEPLOYMENT_KEY }}
+
     - name: Verify deployment
       run: |
         aws lambda wait function-updated --function-name ${{ env.FUNCTION_NAME }} --max-attempts 10
-        echo "Lambda function updated successfully"
+        # Get the function state and version
+        FUNCTION_INFO=$(aws lambda get-function --function-name ${{ env.FUNCTION_NAME }})
+        echo "Lambda function deployment completed"
+        echo "Function state: $(echo $FUNCTION_INFO | jq -r '.Configuration.State')"
+        echo "Last modified: $(echo $FUNCTION_INFO | jq -r '.Configuration.LastModified')"
+        echo "Version: $(echo $FUNCTION_INFO | jq -r '.Configuration.Version')"
+
+    - name: Set up Lambda permissions for API Gateway (optional)
+      if: steps.check_function.outputs.exists == 'false'
+      run: |
+        aws lambda add-permission \
+          --function-name ${{ env.FUNCTION_NAME }} \
+          --statement-id ApiGatewayInvoke \
+          --action lambda:InvokeFunction \
+          --principal apigateway.amazonaws.com \
+          --source-arn "arn:aws:execute-api:ap-south-1:${{ secrets.AWS_ACCOUNT_ID }}:*/*/*/*"
+
+    - name: Clean up old versions (keep last 5)
+      run: |
+        VERSIONS=$(aws lambda list-versions-by-function --function-name ${{ env.FUNCTION_NAME }} --query "Versions[?Version!='$LATEST'].Version" --output text)
+        COUNT=$(echo $VERSIONS | wc -w)
+        if [ $COUNT -gt 5 ]; then
+          for VERSION in $VERSIONS; do
+            if [ $VERSION != $(echo $VERSIONS | rev | cut -d' ' -f1-5 | rev) ]; then
+              aws lambda delete-function --function-name ${{ env.FUNCTION_NAME }} --qualifier $VERSION
+            fi
+          done
+        fi
+
+    - name: Clean up old deployment packages
+      run: |
+        # Keep only the last 5 deployment packages
+        aws s3 ls s3://${{ env.DEPLOYMENT_BUCKET }}/deployments/${{ env.FUNCTION_NAME }}/ \
+          | sort -r \
+          | awk 'NR>5 {print $4}' \
+          | xargs -I {} aws s3 rm s3://${{ env.DEPLOYMENT_BUCKET }}/deployments/${{ env.FUNCTION_NAME }}/{}
