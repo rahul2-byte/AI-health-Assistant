@@ -105,7 +105,7 @@ jobs:
 
     - name: Verify deployment
       run: |
-        aws lambda wait function-updated --function-name ${{ env.FUNCTION_NAME }} --max-attempts 10
+        aws lambda wait function-updated --function-name ${{ env.FUNCTION_NAME }}
         # Get the function state and version
         FUNCTION_INFO=$(aws lambda get-function --function-name ${{ env.FUNCTION_NAME }})
         echo "Lambda function deployment completed"
