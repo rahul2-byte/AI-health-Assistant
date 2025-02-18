@@ -1,8 +1,12 @@
+import sys
+import os
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "python")))
+
 from flask import Flask, request, jsonify
 import requests
 from pyngrok import ngrok
 from dotenv import load_dotenv
-import os
 import yaml
 import re
 from components.agents import llmchain

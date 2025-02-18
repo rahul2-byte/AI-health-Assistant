@@ -1,5 +1,8 @@
-# client.py
+import sys
 import os
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "python")))
+
 from langchain_community.chat_models import ChatOpenAI
 from dotenv import load_dotenv
 
