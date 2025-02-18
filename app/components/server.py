@@ -27,7 +27,7 @@ class TelegramBot():
 
     def get_bot_commands(self):
         # Load YAML file
-        with open("app/components/bot-commands.yml", "r", encoding="utf-8") as file:
+        with open("components/bot-commands.yml", "r", encoding="utf-8") as file:
             bot_commands = yaml.safe_load(file)
         # Return the bot commands
         return {key: value for key, value in bot_commands["commands"].items()}
