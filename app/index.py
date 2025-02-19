@@ -13,12 +13,46 @@ def main(event, context):
         aws_url = os.environ.get('AWS_WEBHOOK_URL')
         if aws_url:
             bot.setup_webhook(aws_url)
-            # Start the webhook
-            bot.webhook()
-    except Exception as e: 
-        print(f"Error running bot: {e}")
-        
-    return {"status": "Bot is running"}
+
+        # Handle the webhook request
+        if event.get('body'):
+            # Create Flask request context for webhook handling
+            with bot.app.test_request_context(
+                path='/webhook',
+                method='POST',
+                data=event['body'],
+                headers=event.get('headers', {})
+            ):
+                # Process webhook and get response
+                response = bot.webhook()
+                return {
+                    'statusCode': 200,
+                    'headers': {
+                        'Content-Type': 'application/json'
+                    },
+                    'body': json.dumps(response.get_json() if hasattr(response, 'get_json') else response)
+                }
+        else:
+            return {
+                'statusCode': 400,
+                'headers': {
+                    'Content-Type': 'application/json'
+                },
+                'body': json.dumps({
+                    'error': 'No body found in request'
+                })
+            }
+    except Exception as e:
+        print(f"Error in lambda handler: {str(e)}")
+        return {
+            'statusCode': 500,
+            'headers': {
+                'Content-Type': 'application/json'
+            },
+            'body': json.dumps({
+                'error': str(e)
+            })
+        }
 
 if __name__ == "__main__":
     # Run locally
