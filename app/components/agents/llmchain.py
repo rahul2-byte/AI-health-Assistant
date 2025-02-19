@@ -61,7 +61,12 @@ def output(prompt):
 
 def get_output(prompt):
     
-    with open("app/components/agents/agent-prompts.yml", "r", encoding="utf-8") as file:
+    file_path = os.path.join(
+                os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+                "components", "agents", "agent-prompts.yml"
+            )
+
+    with open(file_path, "r", encoding="utf-8") as file:
         agent_prompts = yaml.safe_load(file)
         # Return the bot commands
         prompts = {key: value for key, value in agent_prompts["prompts"].items()}

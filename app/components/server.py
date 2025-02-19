@@ -12,11 +12,17 @@ import re
 from components.agents import llmchain
 
 class TelegramBot():
-    def __init__(self):
-        self.PORT = 80
-        load_dotenv()
-        BOT_TOKEN = os.getenv("TELEGRAM_TOKEN")
-        self.BASE_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
+    def __init__(self, is_local=False):
+        self.is_local = is_local
+        # Load environment variables based on environment
+        if self.is_local:
+            load_dotenv()
+            self.BOT_TOKEN = os.getenv("TELEGRAM_TOKEN")
+            self.PORT = int(os.getenv("PORT", 80))
+        else:
+            self.BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
+        
+        self.BASE_URL = f"https://api.telegram.org/bot{self.BOT_TOKEN}"
         
         # ✅ Initialize Flask app before defining routes
         self.app = Flask(__name__)
@@ -26,11 +32,19 @@ class TelegramBot():
         self.app.route('/webhook', methods=['POST'])(self.webhook)
 
     def get_bot_commands(self):
-        # Load YAML file
-        with open("components/bot-commands.yml", "r", encoding="utf-8") as file:
-            bot_commands = yaml.safe_load(file)
-        # Return the bot commands
-        return {key: value for key, value in bot_commands["commands"].items()}
+        try:
+            # Adjust path based on environment
+            if self.is_local:
+                commands_path = "components/bot-commands.yml"
+            else:
+                commands_path = os.path.join(os.path.dirname(__file__), "components", "bot-commands.yml")
+
+            with open(commands_path, "r", encoding="utf-8") as file:
+                bot_commands = yaml.safe_load(file)
+            return {key: value for key, value in bot_commands["commands"].items()}
+        except Exception as e:
+            print(f"Error loading bot commands: {str(e)}")
+            return {}
 
     @staticmethod
     def is_text_a_command(text, commands):
@@ -41,7 +55,6 @@ class TelegramBot():
     def text_command(text, commands):
         """ Return the command text"""
         plain_text_command = re.sub(r"[ /]", "", text)
-
         return commands.get(plain_text_command, "No command found!!")
 
     def send_message(self, chat_id, text):
@@ -51,30 +64,35 @@ class TelegramBot():
             "chat_id": chat_id,
             "text": text
         }
-        response = requests.post(url, json=data)
-        return response.json()
+        try:
+            response = requests.post(url, json=data)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            print(f"Error sending message: {str(e)}")
+            return {"ok": False, "error": str(e)}
 
     def webhook(self):
         """Handle incoming updates from Telegram"""
-        update = request.get_json()
-        
-        # Extract message details
-        if "message" in update:
-            chat_id = update["message"]["chat"]["id"]
-            if "text" in update["message"]:
-                received_text = update["message"]["text"]
-                # Check for commands in received text
+        try:
+            update = request.get_json()
+            
+            if "message" in update:
+                chat_id = update["message"]["chat"]["id"]
+                if "text" in update["message"]:
+                    received_text = update["message"]["text"]
 
-                if self.is_text_a_command(received_text, self.commands):
-                    command = self.text_command(received_text, self.commands)
-                    # Send command instruction
-                    self.send_message(chat_id, command)
-                else: 
-                    # Echo the received message back to user
-                    output = llmchain.get_output(received_text)
-                    self.send_message(chat_id, f"You said: {output}")
+                    if self.is_text_a_command(received_text, self.commands):
+                        command = self.text_command(received_text, self.commands)
+                        self.send_message(chat_id, command)
+                    else: 
+                        output = llmchain.get_output(received_text)
+                        self.send_message(chat_id, f"You said: {output}")
 
-        return jsonify({"ok": True})
+            return jsonify({"ok": True})
+        except Exception as e:
+            print(f"Error in webhook: {str(e)}")
+            return jsonify({"ok": False, "error": str(e)})
 
     def setup_webhook(self, webhook_url):
         """Set up webhook with Telegram"""
@@ -82,19 +100,34 @@ class TelegramBot():
         data = {
             "url": webhook_url
         }
-        response = requests.post(url, json=data)
-        return response.json()
-
-    def run(self):
-        public_url = ngrok.connect(self.PORT)
-        webhook_url = f"{public_url.public_url}/webhook"
-
-        # Set up webhook with Telegram
-        print("Setting up webhook...")
-        result = self.setup_webhook(webhook_url)
-        print(f"Webhook setup result: {result}")
-
-        print(f"Webhook URL: {webhook_url}")
-        self.app.run(port=self.PORT)
-        
+        try:
+            response = requests.post(url, json=data)
+            response.raise_for_status()
+            print(f"Webhook setup response: {response.json()}")
+            return response.json()
+        except Exception as e:
+            print(f"Error setting up webhook: {str(e)}")
+            return {"ok": False, "error": str(e)}
+    
+    def run_local(self):
+        """Run the bot locally using ngrok"""
+        try:
+            from pyngrok import ngrok
+            
+            public_url = ngrok.connect(self.PORT)
+            webhook_url = f"{public_url.public_url}/webhook"
+            
+            print("Setting up webhook for local development...")
+            result = self.setup_webhook(webhook_url)
+            
+            if result.get("ok"):
+                print(f"Local Webhook URL: {webhook_url}")
+                self.app.run(port=self.PORT)
+            else:
+                print("Failed to set up webhook")
+                
+        except Exception as e:
+            print(f"Error in local run: {str(e)}")
+            return {"status": 500, "error": str(e)}
+            
         return {"status": 200, "data": "Bot is Running"}
