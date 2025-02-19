@@ -83,7 +83,7 @@ jobs:
           --timeout ${{ env.TIMEOUT }} \
           --role ${{ env.IAM_ROLE }} \
           --code S3Bucket=${{ env.DEPLOYMENT_BUCKET }},S3Key=${{ env.DEPLOYMENT_KEY }} \
-          --environment Variables={TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}, AWS_WEBHOOK_URL=${{secrets.AWS_WEBHOOK_URL}}, OPENAI_API_KEY=${{secrets.OPENAI_API_KEY}}} \
+          --environment Variables={TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}, AWS_WEBHOOK_URL=${{ secrets.AWS_WEBHOOK_URL }}, OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}} \
           --tags Project=TelegramBot
 
     - name: Update existing Lambda function
