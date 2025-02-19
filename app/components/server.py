@@ -34,13 +34,13 @@ class TelegramBot():
     def get_bot_commands(self):
         try:
             # Adjust path based on environment
-            if self.is_local:
-                commands_path = "components/bot-commands.yml"
-            else:
-                commands_path = os.path.join(os.getcwd(), "bot-commands.yml")
-                # If file is not found than raise the error
-                if not os.path.exists(commands_path):
-                    raise FileNotFoundError(f"File not found: {commands_path}")
+            # if self.is_local:
+            commands_path = "components/bot-commands.yml"
+            # else:
+            #     commands_path = os.path.join(os.getcwd(), "bot-commands.yml")
+            #     # If file is not found than raise the error
+            #     if not os.path.exists(commands_path):
+            #         raise FileNotFoundError(f"File not found: {commands_path}")
 
             with open(commands_path, "r", encoding="utf-8") as file:
                 bot_commands = yaml.safe_load(file)
