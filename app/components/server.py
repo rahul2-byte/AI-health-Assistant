@@ -37,7 +37,10 @@ class TelegramBot():
             if self.is_local:
                 commands_path = "components/bot-commands.yml"
             else:
-                commands_path = os.path.join(os.path.dirname(__file__), "components", "bot-commands.yml")
+                commands_path = os.path.join(os.getcwd(), "bot-commands.yml")
+                # If file is not found than raise the error
+                if not os.path.exists(commands_path):
+                    raise FileNotFoundError(f"File not found: {commands_path}")
 
             with open(commands_path, "r", encoding="utf-8") as file:
                 bot_commands = yaml.safe_load(file)
