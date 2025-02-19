@@ -10,7 +10,7 @@ env:
   FUNCTION_NAME: Telegram-ai-health-agent
   RUNTIME: python3.11
   HANDLER: index.main
-  MEMORY_SIZE: 128
+  MEMORY_SIZE: 256
   TIMEOUT: 30
   IAM_ROLE: ${{ secrets.LAMBDA_EXECUTION_ROLE }}
   DEPLOYMENT_BUCKET: ${{ secrets.S3_BUCKET }}
@@ -83,7 +83,7 @@ jobs:
           --timeout ${{ env.TIMEOUT }} \
           --role ${{ env.IAM_ROLE }} \
           --code S3Bucket=${{ env.DEPLOYMENT_BUCKET }},S3Key=${{ env.DEPLOYMENT_KEY }} \
-          --environment Variables={TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}} \
+          --environment Variables={TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}, AWS_WEBHOOK_URL=${{secrets.AWS_WEBHOOK_URL}}, OPENAI_API_KEY=${{secrets.OPENAI_API_KEY}}} \
           --tags Project=TelegramBot
 
     - name: Update existing Lambda function
