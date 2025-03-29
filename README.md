@@ -71,6 +71,9 @@ The application flow:
 3. The Lambda function processes the message using LLMs
 4. A tailored response is generated and sent back to the user
 
+![image](https://github.com/user-attachments/assets/21f927fa-e86f-410a-80ab-fcc558005fe2)
+
+
 ## 🔮 Future Plans
 
 - Voice message support
